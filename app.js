@@ -5,8 +5,8 @@ let currentIdea = null;
 // === DOM Elements ===
 const categoryList = document.getElementById('categoryList');
 const ideaTitleBar = document.getElementById('ideaTitle');
-const commandsText = document.getElementById('commandsText');
-const notesText = document.getElementById('notesText');
+const chatBox = document.getElementById('chatBox');
+const chatInput = document.getElementById('chatInput');
 const addIdeaBtn = document.getElementById('addIdeaBtn');
 const modal = document.getElementById('modal');
 const newIdeaTitle = document.getElementById('newIdeaTitle');
@@ -36,19 +36,25 @@ function renderSidebar() {
       ideaBtn.className = 'idea-item';
       ideaBtn.textContent = idea.title;
 
-      const menu = document.createElement('span');
-      menu.className = 'idea-options';
-      menu.innerHTML = '⚙️';
-      menu.title = 'Edit or Delete';
-      menu.onclick = (e) => {
+      const exportDot = document.createElement('span');
+      exportDot.className = 'idea-dot green';
+      exportDot.title = 'Export idea';
+      exportDot.onclick = (e) => {
         e.stopPropagation();
-        const action = prompt('Type "edit" to rename, "delete" to remove:');
-        if (action === 'edit') editIdea(idea);
-        if (action === 'delete') deleteIdea(idea);
+        exportIdea(idea);
       };
 
+      const deleteDot = document.createElement('span');
+      deleteDot.className = 'idea-dot brown';
+      deleteDot.title = 'Delete idea';
+      deleteDot.onclick = (e) => {
+        e.stopPropagation();
+        deleteIdea(idea);
+      };
+
+      ideaBtn.appendChild(exportDot);
+      ideaBtn.appendChild(deleteDot);
       ideaBtn.onclick = () => loadIdea(idea.title);
-      ideaBtn.appendChild(menu);
       categoryList.appendChild(ideaBtn);
     });
   });
@@ -58,10 +64,49 @@ function loadIdea(title) {
   currentIdea = ideas.find(i => i.title === title);
   if (!currentIdea) return;
   ideaTitleBar.textContent = currentIdea.title;
-  commandsText.value = currentIdea.commands || '';
-  notesText.value = currentIdea.notes || '';
-  commandsText.disabled = false;
-  notesText.disabled = false;
+  renderChat();
+  chatInput.disabled = false;
+}
+
+function renderChat() {
+  chatBox.innerHTML = '';
+  (currentIdea.messages || []).forEach((msg, index) => {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'chat-message';
+    msgDiv.textContent = msg;
+
+    const controls = document.createElement('div');
+    controls.className = 'msg-controls';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy';
+    copyBtn.onclick = () => navigator.clipboard.writeText(msg);
+
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit';
+    editBtn.onclick = () => {
+      const newText = prompt('Edit message:', msg);
+      if (newText !== null) {
+        currentIdea.messages[index] = newText;
+        saveToLocal();
+        renderChat();
+      }
+    };
+
+    const delBtn = document.createElement('button');
+    delBtn.textContent = 'Delete';
+    delBtn.onclick = () => {
+      currentIdea.messages.splice(index, 1);
+      saveToLocal();
+      renderChat();
+    };
+
+    controls.appendChild(copyBtn);
+    controls.appendChild(editBtn);
+    controls.appendChild(delBtn);
+    msgDiv.appendChild(controls);
+    chatBox.appendChild(msgDiv);
+  });
 }
 
 function saveToLocal() {
@@ -74,25 +119,19 @@ function deleteIdea(idea) {
   if (currentIdea?.title === idea.title) {
     currentIdea = null;
     ideaTitleBar.textContent = 'Select an idea';
-    commandsText.value = '';
-    notesText.value = '';
-    commandsText.disabled = true;
-    notesText.disabled = true;
+    chatBox.innerHTML = '';
+    chatInput.disabled = true;
   }
   saveToLocal();
   renderSidebar();
 }
 
-function editIdea(idea) {
-  const newTitle = prompt('New title:', idea.title);
-  const newCategory = prompt('New category:', idea.category);
-  if (newTitle && newCategory) {
-    idea.title = newTitle;
-    idea.category = newCategory;
-    saveToLocal();
-    renderSidebar();
-    loadIdea(newTitle);
-  }
+function exportIdea(idea) {
+  const blob = new Blob([JSON.stringify(idea, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${idea.title}.json`;
+  a.click();
 }
 
 // === Events ===
@@ -111,7 +150,7 @@ saveNewIdeaBtn.onclick = () => {
   const category = newIdeaCategory.value.trim();
   if (!title || !category) return;
 
-  const newIdea = { title, category, commands: '', notes: '' };
+  const newIdea = { title, category, messages: [] };
   ideas.push(newIdea);
   saveToLocal();
   renderSidebar();
@@ -120,17 +159,13 @@ saveNewIdeaBtn.onclick = () => {
   newIdeaCategory.value = '';
 };
 
-commandsText.addEventListener('input', () => {
-  if (currentIdea) {
-    currentIdea.commands = commandsText.value;
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && currentIdea && chatInput.value.trim()) {
+    currentIdea.messages = currentIdea.messages || [];
+    currentIdea.messages.push(chatInput.value.trim());
+    chatInput.value = '';
     saveToLocal();
-  }
-});
-
-notesText.addEventListener('input', () => {
-  if (currentIdea) {
-    currentIdea.notes = notesText.value;
-    saveToLocal();
+    renderChat();
   }
 });
 
